@@ -28,7 +28,7 @@ namespace SoftDeleteDemo.Data
             builder.Entity<T>().HasQueryFilter(e => e.RecStatus.Equals('A'));
         }
 
-        static readonly MethodInfo SetGlobalQueryMethod = typeof(ApplicationDbContext)
+        private static readonly MethodInfo SetGlobalQueryMethod = typeof(ApplicationDbContext)
             .GetMethods(BindingFlags.Public | BindingFlags.Instance)
             .Single(t => t.IsGenericMethod && t.Name == "SetGlobalQuery");
 
@@ -36,11 +36,9 @@ namespace SoftDeleteDemo.Data
         {
             foreach (var type in builder.Model.GetEntityTypes())
             {
-                if (type.BaseType == null && typeof(ISoftDelete).IsAssignableFrom(type.ClrType))
-                {
-                    var method = SetGlobalQueryMethod.MakeGenericMethod(type.ClrType);
-                    method.Invoke(this, new object[] {builder});
-                }
+                if (type.BaseType != null || !typeof(ISoftDelete).IsAssignableFrom(type.ClrType)) continue;
+                var method = SetGlobalQueryMethod.MakeGenericMethod(type.ClrType);
+                method.Invoke(this, new object[] {builder});
             }
         }
 
