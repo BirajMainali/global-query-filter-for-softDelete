@@ -25,7 +25,7 @@ namespace SoftDeleteDemo.Controllers
         
         public async Task<IActionResult> New()
         {
-            var demoList = new List<DemoModel>()
+            var demos = new List<DemoModel>()
             {
                 new DemoModel()
                 {
@@ -40,9 +40,9 @@ namespace SoftDeleteDemo.Controllers
                     Description = "Soft Model Demo 3"
                 }
             };
-            foreach (var model in demoList)
+            foreach (var demo in demos)
             {
-                await _context.DemoModel.AddRangeAsync(model);
+                await _context.DemoModel.AddRangeAsync(demo);
                 await _context.SaveChangesAsync();
             }
 

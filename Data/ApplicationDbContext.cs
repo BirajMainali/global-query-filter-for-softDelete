@@ -50,14 +50,25 @@ namespace SoftDeleteDemo.Data
             foreach (var entry in ChangeTracker.Entries())
             {
                 var entity = entry.Entity;
-                if (entry.State == EntityState.Deleted && entity is ISoftDelete)
-                {
-                    entry.State = EntityState.Modified;
-                    entity.GetType().GetProperty("RecStatus")?.SetValue(entity, 'D');
-                }
+                if (entry.State != EntityState.Deleted || entity is not ISoftDelete) continue;
+                entry.State = EntityState.Modified;
+                entity.GetType().GetProperty("RecStatus")?.SetValue(entity, 'D');
             }
 
             return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+
+        public override int SaveChanges()
+        {
+            foreach (var entry in ChangeTracker.Entries())
+            {
+                var entity = entry.Entity;
+                if (entry.State != EntityState.Deleted || entity is not ISoftDelete) continue;
+                entry.State = EntityState.Modified;
+                entry.GetType().GetProperty("RecStatus")?.SetValue(entity, 'D');
+            }
+
+            return base.SaveChanges();
         }
     }
 }
