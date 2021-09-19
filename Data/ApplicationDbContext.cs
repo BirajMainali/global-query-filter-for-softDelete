@@ -1,18 +1,26 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using SoftDeleteDemo.Entities;
 
 namespace SoftDeleteDemo.Data
 {
     public class ApplicationDbContext : IdentityDbContext
     {
-        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+        private readonly IHttpContextAccessor _contextAccessor;
+        private Guid _transactionSequence;
+
+        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options,
+            IHttpContextAccessor contextAccessor)
             : base(options)
         {
+            _contextAccessor = contextAccessor;
         }
 
         protected override void OnModelCreating(ModelBuilder builder)
@@ -38,7 +46,7 @@ namespace SoftDeleteDemo.Data
             {
                 if (type.BaseType != null || !typeof(ISoftDelete).IsAssignableFrom(type.ClrType)) continue;
                 var method = SetGlobalQueryMethod.MakeGenericMethod(type.ClrType);
-                method.Invoke(this, new object[] {builder});
+                method.Invoke(this, new object[] { builder });
             }
         }
 
@@ -53,6 +61,7 @@ namespace SoftDeleteDemo.Data
                 entity.GetType().GetProperty("RecStatus")?.SetValue(entity, 'D');
             }
 
+            BeforeSaveChanges();
             return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
         }
 
@@ -66,7 +75,45 @@ namespace SoftDeleteDemo.Data
                 entry.GetType().GetProperty("RecStatus")?.SetValue(entity, 'D');
             }
 
+            BeforeSaveChanges();
             return base.SaveChanges();
+        }
+
+        private void BeforeSaveChanges()
+        {
+            ChangeTracker.DetectChanges();
+            var changedEntries = ChangeTracker.Entries().Where(x =>
+                x.State == EntityState.Added || x.State == EntityState.Modified || x.State == EntityState.Deleted);
+            InitializeTransactionSequenceIfNeeded();
+            foreach (var model in changedEntries)
+            {
+                switch (model.State)
+                {
+                    case EntityState.Added:
+                        if (model.Entity is IRecordInfo recordInfo)
+                        {
+                            var username = _contextAccessor.HttpContext?.User?.Identity?.Name;
+                            recordInfo.User = Users.FirstOrDefault(x => x.Email.Equals(username));
+                        }
+
+                        if (model.Entity is GenericModel baseModel)
+                        {
+                            AttachTransactionSequence(baseModel);
+                        }
+
+                        break;
+                }
+            }
+        }
+
+        private void AttachTransactionSequence(GenericModel entity)
+        {
+            entity.TransactionSequence = _transactionSequence.ToString();
+        }
+
+        private void InitializeTransactionSequenceIfNeeded()
+        {
+            _transactionSequence = Guid.NewGuid();
         }
     }
 }
